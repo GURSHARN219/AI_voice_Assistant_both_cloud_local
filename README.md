@@ -25,6 +25,36 @@ A sophisticated voice-enabled AI assistant built with Python, featuring real-tim
 - 🌙 **Theme Toggle** - Light/dark mode support
 - 🔇 **TTS Control** - Easy toggle for text-to-speech functionality
 
+## 🏗️ **System Architecture**
+
+The following diagram shows how Sophia AI Assistant processes user input through various components:
+
+```mermaid
+graph TD
+    A[User Input] --> B{Input Type}
+    B -->|Voice| C[STT Handler]
+    B -->|Text| D[LLM Handler]
+    C --> E[Transcribe Speech]
+    E --> D
+    D --> F{Provider}
+    F -->|OpenRouter| G[Cloud LLM]
+    F -->|LM Studio| H[Local LLM]
+    G --> I[Generate Response]
+    H --> I
+    I --> J[TTS Handler]
+    J --> K[Play Audio]
+    K --> L[GUI Update]
+```
+
+**Flow Explanation:**
+1. **User Input** - Voice (microphone) or text (keyboard) input
+2. **STT Handler** - Converts speech to text using Faster-Whisper
+3. **LLM Handler** - Processes text and manages provider fallback
+4. **Provider Selection** - Chooses between OpenRouter (cloud) or LM Studio (local)
+5. **Response Generation** - AI generates contextual response
+6. **TTS Handler** - Converts text response to speech using Kokoro
+7. **GUI Update** - Updates interface with conversation history
+
 ## 🛠️ Core Technologies & Libraries
 
 ### **CustomTkinter**
