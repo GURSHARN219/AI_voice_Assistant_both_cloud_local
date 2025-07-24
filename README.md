@@ -6,6 +6,8 @@
 
 A sophisticated voice-enabled AI assistant built with Python, featuring real-time speech recognition, natural language processing, and text-to-speech capabilities. Meet Sophia - your intelligent, conversational AI companion with a modern GUI interface.
 
+> 🚀 **Exciting Future Ahead!** Check out our [**Future Roadmap**](FUTURE_ROADMAP.md) to see the revolutionary multimodal features coming to Sophia AI - including live video chat, image generation, document intelligence, and autonomous AI capabilities!
+
 ![Sophia AI Assistant](/pic/image1.png)
 *Sophia AI Assistant - Main Interface*
 
@@ -181,12 +183,33 @@ sophia-ai-assistant/
 │   ├── tts_handler.py       # Text-to-speech synthesis
 │   ├── simulation.py        # Visual effects and animations
 │   └── test.py             # Testing and development utilities
+├── pic/                     # Project images and screenshots
 ├── requirements.txt         # Python dependencies
 ├── .env.example            # Environment variables template
 ├── .env                    # Environment variables (create this)
 ├── .gitignore             # Git ignore rules
+├── FUTURE_ROADMAP.md       # 🚀 Exciting future features and roadmap
 └── README.md              # This file
 ```
+
+## 🔮 **What's Next? Future Vision**
+
+Sophia AI Assistant is just the beginning! We're building toward a **revolutionary multimodal AI experience**:
+
+### 🎬 **Coming Soon**
+- **📹 Live Video Chat** - Real-time face-to-face conversations with emotion detection
+- **🖼️ Image Intelligence** - Upload, analyze, and generate images with natural language
+- **📱 Document Processing** - Smart PDF, DOCX analysis and interactive document chat
+- **🎥 Video Creation** - AI-powered video generation and editing capabilities
+- **🤖 Autonomous Agents** - Self-improving AI that learns and acts independently
+
+### 🚀 **Advanced Capabilities**
+- **🔧 MCP Server Integration** - Extensible plugin ecosystem for unlimited functionality
+- **💻 Live Webcam Processing** - Real-time object detection and scene understanding
+- **📐 Blueprint Generation** - Create technical drawings and architectural plans
+- **🌐 Multi-Device Sync** - Seamless experience across all your devices
+
+**👉 [View Complete Roadmap](FUTURE_ROADMAP.md)** for detailed timeline, features, and technical specifications!
 
 ## 🤝 Contributing
 
