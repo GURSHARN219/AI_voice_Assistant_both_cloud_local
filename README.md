@@ -6,10 +6,10 @@
 
 A sophisticated voice-enabled AI assistant built with Python, featuring real-time speech recognition, natural language processing, and text-to-speech capabilities. Meet Sophia - your intelligent, conversational AI companion with a modern GUI interface.
 
-![Sophia AI Assistant](image1.png)
+![Sophia AI Assistant](/pic/image1.png)
 *Sophia AI Assistant - Main Interface*
 
-![AI Interaction Demo](image2.png)
+![AI Interaction Demo](/pic/image2.png)
 *Real-time Voice Interaction with Visual Feedback*
 
 ## ✨ Features
