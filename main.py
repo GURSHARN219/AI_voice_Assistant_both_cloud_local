@@ -1,6 +1,14 @@
 import customtkinter as ctk
 import threading
 import asyncio
+import warnings
+import os
+
+# Suppress non-critical warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TensorFlow warnings if present
+
 from codes.gui import VoiceChatGUI
 
 
