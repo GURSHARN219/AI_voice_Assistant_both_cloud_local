@@ -8,10 +8,10 @@ from collections import deque
 import codes.llm_handler
 import codes.stt_handler
 import codes.tts_handler
+from codes.voice_mode import VoiceMode
 
 
 class Indicator:
-    """A visual indicator for processing steps (STT, LLM, TTS)."""
 
     def __init__(self, parent, text):
         self.frame = ctk.CTkFrame(parent, fg_color="transparent")
@@ -31,7 +31,6 @@ class Indicator:
         self.dot.pack(side="left", padx=3)
 
     def set_state(self, state: str):
-        """Sets the indicator state ('inactive', 'active', 'success')."""
         colors = {
             "inactive": ("#CCCCCC", "#4A4A4A"),
             "active": ("#0078D4", "#4A9FFF"),
@@ -44,7 +43,6 @@ class Indicator:
 
 
 class WaveBubble(ctk.CTkFrame):
-    """Small waveform visual that mirrors live microphone amplitude."""
 
     def __init__(self, parent, width=110, height=46, sample_count=28):
         self.canvas = None
@@ -68,7 +66,7 @@ class WaveBubble(ctk.CTkFrame):
 
     def _build_gradient(self):
         try:
-            from wavesurfer import utils as ws_utils  # type: ignore
+            from wavesurfer import utils as ws_utils
 
             cmap = ws_utils.get_cmap("magma")
             gradient = [self._rgba_to_hex(color[:3]) for color in cmap[::16][:6]]
@@ -135,13 +133,12 @@ class WaveBubble(ctk.CTkFrame):
 
 
 class VoiceChatGUI(ctk.CTk):
-    """The main GUI class for the AI Chatbot application."""
 
     def __init__(self, loop):
         super().__init__()
         self.async_loop = loop
         self.audio_queue = queue.Queue()
-        self.tts_enabled = True  # TTS is on by default
+        self.voice_mode_active = False  # Voice mode popup state
         self.listening = False
         self.stt_worker_active = False
         self.mic_stop_event = threading.Event()
@@ -158,81 +155,43 @@ class VoiceChatGUI(ctk.CTk):
         ctk.set_appearance_mode("dark")
         ctk.set_default_color_theme("blue")
         
-        # Modern window styling
         self.configure(fg_color=("#E8EAED", "#121212"))
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(1, weight=1)
 
-        # --- Create UI Panels ---
         self._create_header()
         self._create_chat_panel()
         self._create_status_bar()
 
         self.protocol("WM_DELETE_WINDOW", self.on_closing)
+        
+        self.voice_mode = VoiceMode(self, self.async_loop, self.audio_queue, self.mic_stop_event)
+        
+        codes.stt_handler.set_status_callback(self._on_model_loaded)
+        codes.tts_handler.set_status_callback(self._on_model_loaded)
+        self.status_label.configure(
+            text="⏳ Loading models...",
+            text_color=("#FF9800", "#FFB74D")
+        )
+        
         self.after(500, self.show_initial_greeting)
         self.after(250, self._update_waveform)
 
     def _configure_chat_tags(self):
-        """Configure chat display tags based on current theme."""
-        current_mode = ctk.get_appearance_mode().lower()
-        is_dark = current_mode == "dark"
-        
-        # User message bubble
-        self.chat_display.tag_config(
-            "user_bubble",
+        self.chat_display.tag_configure(
+            "right_align",
             justify="right",
-            rmargin=20,
-            lmargin1=100,
-            foreground="#FFFFFF",
-            background="#0078D4",
-            spacing1=6,
-            spacing3=6,
-            relief="flat",
-            borderwidth=0,
+            lmargin1=200,
+            lmargin2=200
         )
         
-        # AI message bubble
-        self.chat_display.tag_config(
-            "ai_bubble",
+        self.chat_display.tag_configure(
+            "left_align",
             justify="left",
-            lmargin1=20,
-            lmargin2=20,
-            rmargin=100,
-            foreground="#1F1F1F" if not is_dark else "#E8E8E8",
-            background="#F0F2F5" if not is_dark else "#2D2D2D",
-            spacing1=6,
-            spacing3=6,
-            relief="flat",
-            borderwidth=0,
-        )
-        
-        # Header tags (name + timestamp)
-        self.chat_display.tag_config(
-            "user_header",
-            justify="right",
-            rmargin=20,
-            foreground="#0078D4" if not is_dark else "#4A9FFF",
-            spacing1=12,
-            spacing3=2,
-        )
-        
-        self.chat_display.tag_config(
-            "ai_header",
-            justify="left",
-            lmargin1=20,
-            foreground="#6C3BA6" if not is_dark else "#B084E0",
-            spacing1=12,
-            spacing3=2,
-        )
-        
-        # Timestamp styling
-        self.chat_display.tag_config(
-            "timestamp",
-            foreground="#888888" if not is_dark else "#707070",
+            rmargin=200
         )
 
     def _create_header(self):
-        """Creates a modern header with gradient accent."""
         header = ctk.CTkFrame(
             self,
             height=65,
@@ -242,7 +201,6 @@ class VoiceChatGUI(ctk.CTk):
         header.grid(row=0, column=0, sticky="ew", padx=0, pady=0)
         header.grid_propagate(False)
         
-        # Add bottom border accent
         accent_line = ctk.CTkFrame(
             header,
             height=2,
@@ -250,7 +208,6 @@ class VoiceChatGUI(ctk.CTk):
         )
         accent_line.pack(side="bottom", fill="x")
         
-        # Title with icon
         title_frame = ctk.CTkFrame(header, fg_color="transparent")
         title_frame.pack(side="left", padx=20, pady=10)
         
@@ -270,7 +227,6 @@ class VoiceChatGUI(ctk.CTk):
         )
         subtitle.pack(side="left", padx=(8, 0), pady=(6, 0))
         
-        # Right side buttons
         button_frame = ctk.CTkFrame(header, fg_color="transparent")
         button_frame.pack(side="right", padx=15)
         
@@ -288,6 +244,20 @@ class VoiceChatGUI(ctk.CTk):
         )
         self.header_theme_button.pack(side="right", padx=5)
         
+        self.clear_chat_button = ctk.CTkButton(
+            button_frame,
+            text="🗑️",
+            width=35,
+            height=35,
+            font=("Arial", 16),
+            corner_radius=17,
+            command=self.clear_chat,
+            fg_color=("#E8E8E8", "#2B2B2B"),
+            hover_color=("#D0D0D0", "#3B3B3B"),
+            border_width=0,
+        )
+        self.clear_chat_button.pack(side="right", padx=5)
+        
         self.header_tts_button = ctk.CTkButton(
             button_frame,
             text="🔊",
@@ -303,7 +273,6 @@ class VoiceChatGUI(ctk.CTk):
         self.header_tts_button.pack(side="right", padx=5)
 
     def _create_chat_panel(self):
-        """Creates the main chat panel that fills the window."""
         container_frame = ctk.CTkFrame(
             self,
             corner_radius=0,
@@ -312,20 +281,25 @@ class VoiceChatGUI(ctk.CTk):
         container_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
         container_frame.grid_rowconfigure(0, weight=1)
         container_frame.grid_columnconfigure(0, weight=1)
-
-        self.chat_display = ctk.CTkTextbox(
+        is_dark = ctk.get_appearance_mode().lower() == "dark"
+        self.chat_display = tk.Text(
             container_frame,
             font=("Segoe UI", 13),
-            corner_radius=0,
-            border_width=0,
-            fg_color=("#FFFFFF", "#1A1A1A"),
+            bg="#1A1A1A" if is_dark else "#FFFFFF",
+            fg="#E8E8E8" if is_dark else "#1F1F1F",
             wrap="word",
             state="disabled",
+            relief="flat",
+            borderwidth=0,
+            highlightthickness=0,
+            padx=10,
+            pady=10
         )
         self.chat_display.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         
-        # Professional message bubble styling
         self._configure_chat_tags()
+        
+        self.current_stream_label = None
 
         input_container = ctk.CTkFrame(
             container_frame,
@@ -335,7 +309,6 @@ class VoiceChatGUI(ctk.CTk):
         )
         input_container.grid(row=1, column=0, padx=0, pady=0, sticky="ew")
         
-        # Add top border
         top_border = ctk.CTkFrame(
             input_container,
             height=1,
@@ -389,7 +362,6 @@ class VoiceChatGUI(ctk.CTk):
         self.mic_button.grid(row=0, column=2, padx=(10, 0))
 
     def _create_status_bar(self):
-        """Creates the bottom status bar with an improved layout."""
         status_bar = ctk.CTkFrame(
             self,
             corner_radius=0,
@@ -402,8 +374,6 @@ class VoiceChatGUI(ctk.CTk):
         status_bar.grid_columnconfigure(0, weight=1)
         status_bar.grid_columnconfigure(1, weight=0)
         status_bar.grid_columnconfigure(2, weight=1)
-
-        # --- Left side: Status Label ---
         self.status_label = ctk.CTkLabel(
             status_bar,
             text="✨ Ready",
@@ -412,11 +382,8 @@ class VoiceChatGUI(ctk.CTk):
         )
         self.status_label.grid(row=0, column=0, padx=20, sticky="w")
 
-        # --- Center: Process Indicators ---
         indicator_frame = ctk.CTkFrame(status_bar, fg_color="transparent")
-        indicator_frame.grid(
-            row=0, column=1, sticky="ns"
-        )  # Center the frame in the column
+        indicator_frame.grid(row=0, column=1, sticky="ns")
 
         self.stt_indicator = Indicator(indicator_frame, "STT")
         self.stt_indicator.pack(side="left", padx=8)
@@ -425,7 +392,6 @@ class VoiceChatGUI(ctk.CTk):
         self.tts_indicator = Indicator(indicator_frame, "TTS")
         self.tts_indicator.pack(side="left", padx=8)
 
-        # --- Right side: Provider info ---
         right_group = ctk.CTkFrame(status_bar, fg_color="transparent")
         right_group.grid(row=0, column=2, padx=20, sticky="e")
 
@@ -437,25 +403,36 @@ class VoiceChatGUI(ctk.CTk):
         )
         self.provider_label.pack(side="right")
 
+    def clear_chat(self):
+        self.chat_display.configure(state="normal")
+        self.chat_display.delete("1.0", tk.END)
+        self.chat_display.configure(state="disabled")
+        self.show_initial_greeting()
+
     def toggle_theme(self):
-        """Toggles the UI theme between light and dark mode."""
         current_mode = ctk.get_appearance_mode()
         new_mode = "light" if current_mode.lower() == "dark" else "dark"
         ctk.set_appearance_mode(new_mode)
-        # Show sun icon in light mode, moon icon in dark mode
         button_text = "☀️" if new_mode == "light" else "🌙"
         self.header_theme_button.configure(text=button_text)
-        # Reconfigure chat tags for new theme
-        self._configure_chat_tags()
+        is_dark = new_mode == "dark"
+        self.chat_display.configure(
+            bg="#1A1A1A" if is_dark else "#FFFFFF",
+            fg="#E8E8E8" if is_dark else "#1F1F1F"
+        )
 
     def toggle_tts(self):
-        """Toggles the text-to-speech functionality on or off."""
-        self.tts_enabled = not self.tts_enabled
-        button_text = "🔊" if self.tts_enabled else "🔇"
+        self.voice_mode_active = not self.voice_mode_active
+        button_text = "🔊" if self.voice_mode_active else "🔇"
         self.header_tts_button.configure(text=button_text)
+        
+        if self.voice_mode_active:
+            self.voice_mode.show()
+        else:
+            self.voice_mode.hide()
+            self.voice_mode_active = False
 
     def _safe_ui(self, callback, *args, **kwargs):
-        """Ensures UI mutations run on the Tk main thread."""
         if threading.current_thread() is threading.main_thread():
             callback(*args, **kwargs)
         else:
@@ -466,29 +443,71 @@ class VoiceChatGUI(ctk.CTk):
             "Sophia", "I'm Sophia, your AI assistant. How can I help you today?"
         )
 
-    def update_chat_display(self, sender, message):
+    def update_chat_display(self, sender, message, streaming=False):
         from datetime import datetime
+
         self.chat_display.configure(state="normal")
-        
-        timestamp = datetime.now().strftime("%H:%M")
         is_user = sender == "You"
+        if streaming and self.current_stream_label:
+            self.current_stream_label.configure(text=message)
+            self.chat_display.see(tk.END)
+            self.current_stream_label.update_idletasks()
+            self.chat_display.configure(state="disabled")
+            return
+
+        # --- 2. Styles & Colors ---
+        is_dark = ctk.get_appearance_mode().lower() == "dark"
         
-        # Insert header (name + timestamp)
-        header_tag = "user_header" if is_user else "ai_header"
+        if is_user:
+            bg_color = "#0078D4"         # Blue
+            text_color = "#FFFFFF"       # White
+            align_tag = "right_align"
+        else:
+            bg_color = "#2D2D2D" if is_dark else "#E5E5EA" 
+            text_color = "#E8E8E8" if is_dark else "#000000"
+            align_tag = "left_align"
+
+        timestamp = datetime.now().strftime("%H:%M")
         header_text = f"{sender} • {timestamp}\n"
-        self.chat_display.insert(ctk.END, header_text, (header_tag, "timestamp"))
+        self.chat_display.insert(tk.END, header_text, align_tag)
+
+        bubble_frame = ctk.CTkFrame(
+            self.chat_display,
+            fg_color=bg_color,
+            corner_radius=16,
+            border_width=0
+        )
+
+        max_width = int(self.chat_display.winfo_width() * 0.7) if self.chat_display.winfo_width() > 1 else 400
+
+        msg_label = ctk.CTkLabel(
+            bubble_frame,
+            text=message,
+            font=("Segoe UI", 14),
+            text_color=text_color,
+            wraplength=max_width,
+            justify="left",
+            anchor="w"
+        )
+        msg_label.pack(padx=12, pady=8)
+
+        window_start = self.chat_display.index(tk.END)
+        self.chat_display.window_create(tk.END, window=bubble_frame)
+        window_end = self.chat_display.index(tk.END)
         
-        # Insert message bubble
-        bubble_tag = "user_bubble" if is_user else "ai_bubble"
-        # Add padding inside the bubble
-        padded_message = f" {message} \n"
-        self.chat_display.insert(ctk.END, padded_message, bubble_tag)
+        self.chat_display.tag_add(align_tag, window_start + " linestart", window_end)
         
-        # Add spacing between messages
-        self.chat_display.insert(ctk.END, "\n")
-        
-        self.chat_display.see(ctk.END)
+        self.chat_display.insert(tk.END, "\n\n")
+        if not is_user:
+            self.current_stream_label = msg_label
+        else:
+            self.current_stream_label = None
+
+        self.chat_display.see(tk.END)
         self.chat_display.configure(state="disabled")
+    
+    def clear_stream_state(self):
+        self.current_stream_label = None
 
     def handle_text_input(self, event=None):
         prompt = self.chat_entry.get()
@@ -518,6 +537,7 @@ class VoiceChatGUI(ctk.CTk):
             return
         self.listening = True
         self.stt_worker_active = True
+        # S2S mode is controlled by header_tts_button, not automatic
         self.mic_stop_event.clear()
         self._clear_audio_queue()
         self.wave_bubble.reset()
@@ -570,9 +590,22 @@ class VoiceChatGUI(ctk.CTk):
             text_color=("#6C3BA6", "#B084E0")
         )
         self._safe_ui(self.llm_indicator.set_state, "active")
+        
+        # Show initial AI bubble with typing indicator
+        self._safe_ui(self.update_chat_display, "Sophia", "...", False)
+        
+        accumulated_response = ""
+        
+        def stream_update(delta):
+            nonlocal accumulated_response
+            accumulated_response += delta
+            clean_text = accumulated_response.lstrip()
+            if clean_text:
+                self._safe_ui(self.update_chat_display, "Sophia", clean_text, True)
 
         future = asyncio.run_coroutine_threadsafe(
-            codes.llm_handler.query_llm(prompt), self.async_loop
+            codes.llm_handler.query_llm(prompt, stream_callback=stream_update), 
+            self.async_loop
         )
         try:
             response_text, provider = future.result()
@@ -580,28 +613,12 @@ class VoiceChatGUI(ctk.CTk):
             print(f"[LLM] Error: {exc}")
             response_text = "I'm still thinking, could you try asking again in a moment?"
             provider = "Unavailable"
+            self._safe_ui(self.update_chat_display, "Sophia", response_text, True)
+        
+        self._safe_ui(self.clear_stream_state)
 
         self._safe_ui(self.llm_indicator.set_state, "success")
         self._safe_ui(self.provider_label.configure, text=f"🤖 {provider}")
-        self._safe_ui(self.update_chat_display, "Sophia", response_text)
-
-        if self.tts_enabled:
-            self._safe_ui(
-                self.status_label.configure,
-                text="🔊 Speaking...",
-                text_color=("#4CAF50", "#66BB6A")
-            )
-            self._safe_ui(self.tts_indicator.set_state, "active")
-
-            tts_future = asyncio.run_coroutine_threadsafe(
-                codes.tts_handler.speak_text(response_text), self.async_loop
-            )
-            try:
-                tts_future.result()
-            except Exception as exc:
-                print(f"[TTS] Error: {exc}")
-
-            self._safe_ui(self.tts_indicator.set_state, "success")
 
         self._safe_ui(
             self.status_label.configure,
@@ -644,22 +661,38 @@ class VoiceChatGUI(ctk.CTk):
                 break
 
     def _update_waveform(self):
-        latest_amplitude = None
-        while not self.audio_queue.empty():
-            try:
-                latest_amplitude = self.audio_queue.get_nowait()
-            except queue.Empty:
-                break
+        if not self.voice_mode_active:
+            latest_amplitude = None
+            while not self.audio_queue.empty():
+                try:
+                    latest_amplitude = self.audio_queue.get_nowait()
+                except queue.Empty:
+                    break
 
-        if latest_amplitude is not None:
-            normalized = min(latest_amplitude * 14, 1.0)
-            self.wave_bubble.push_sample(normalized)
-        else:
-            decay = 0.03 if self.listening else 0.08
-            self.wave_bubble.decay(decay)
+            if latest_amplitude is not None:
+                normalized = min(latest_amplitude * 14, 1.0)
+                self.wave_bubble.push_sample(normalized)
+            else:
+                decay = 0.03 if self.listening else 0.08
+                self.wave_bubble.decay(decay)
 
-        self.wave_bubble.set_active(self.listening)
+            self.wave_bubble.set_active(self.listening)
+        
         self.after(70, self._update_waveform)
+    
+    def _on_model_loaded(self, message):
+        self._safe_ui(
+            self.status_label.configure,
+            text=f"✅ {message}",
+            text_color=("#4CAF50", "#66BB6A")
+        )
+        if codes.stt_handler.STT_MODEL and codes.tts_handler.pipeline:
+            self._safe_ui(
+                lambda: self.after(1500, lambda: self.status_label.configure(
+                    text="✨ Ready",
+                    text_color=("#666666", "#999999")
+                ))
+            )
 
     def on_closing(self):
         self.async_loop.call_soon_threadsafe(self.async_loop.stop)
