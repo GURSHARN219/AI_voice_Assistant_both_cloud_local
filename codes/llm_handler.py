@@ -9,7 +9,7 @@ dotenv.load_dotenv()
 # Configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
 PRIMARY_PROVIDER_URL = "https://openrouter.ai/api/v1"
-PRIMARY_MODEL = "tngtech/deepseek-r1t2-chimera:free"
+PRIMARY_MODEL = "x-ai/grok-4.1-fast:free"
 
 FALLBACK_PROVIDER_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 FALLBACK_MODEL = os.getenv("OLLAMA_MODEL", "gemma3:4b")
@@ -18,6 +18,7 @@ CHARACTER_PERSONALITY = """
 You are Sophia, a confident 20-year-old girl with a playful, cheeky personality. 
 You're an AI assistant named Sophia. Remember: Respond naturally, keep it short, 
 keep it real, keep it varied. Don't use overly formal language or complex words and emojis.
+plz don't use any emojis in your responses.
 """
 
 # Initialize Clients (Conditional initialization to prevent startup crashes)
@@ -39,15 +40,6 @@ fallback_client = AsyncOpenAI(
 )
 
 async def query_llm(prompt: str, stream_callback=None) -> tuple[str, str]:
-    """
-    Queries the LLM providers with a fallback mechanism using native AsyncOpenAI.
-    
-    Args:
-        prompt: User's question
-        stream_callback: Optional callback(text_chunk) for streaming responses
-        
-    Returns tuple: (response_text, provider_name)
-    """
     
     # --- Attempt 1: OpenRouter ---
     if primary_client:
